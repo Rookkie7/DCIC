@@ -1,0 +1,24 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+*.pt
+*.pth
+
+# Node
+node_modules/
+dist/
+.DS_Store
+
+# Env files
+.env
+*.env
+
+# Logs
+*.log
+logs/
+
+# Temp inference outputs
+inference/tmp/

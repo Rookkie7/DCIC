@@ -1,0 +1,25 @@
+version: '3.9'
+
+services:
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    ports:
+      - "8000:8000"
+    environment:
+      - INFERENCE_URL=http://localhost:8081   # reachable via SSH tunnel on host
+      - TASK_TIMEOUT=300
+      - CORS_ORIGINS=http://localhost:5173,http://localhost:3000,http://localhost:80
+    network_mode: host   # allows access to SSH tunnel on host loopback
+    restart: unless-stopped
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    ports:
+      - "80:80"
+    depends_on:
+      - backend
+    restart: unless-stopped

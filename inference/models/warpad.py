@@ -15,6 +15,7 @@ from torchvision import transforms
 from pytorch_wavelets import DWTForward, DWTInverse
 
 from config import (
+    TIMM_DINOV2_WEIGHTS,
     WARPAD_PREP_SIZE, WARPAD_PATCH_SIZE, WARPAD_NOISE_LEVEL, WARPAD_THRESHOLD,
 )
 from utils.explanation import generate_explanation
@@ -37,9 +38,15 @@ _device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 def _load_model():
     global _model, _dwt, _idwt
     if _model is None:
+        if not TIMM_DINOV2_WEIGHTS:
+            raise RuntimeError(
+                "TIMM_DINOV2_WEIGHTS is not set. Point it to the local "
+                "vit_large_patch14_dinov2.lvd142m checkpoint file."
+            )
         _model = timm.create_model(
             "vit_large_patch14_dinov2.lvd142m",
-            pretrained=True,
+            pretrained=False,
+            checkpoint_path=TIMM_DINOV2_WEIGHTS,
             img_size=WARPAD_PATCH_SIZE,
         ).eval().to(_device)
         _dwt  = DWTForward(J=2, wave="haar").to(_device)

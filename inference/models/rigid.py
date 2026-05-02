@@ -13,7 +13,7 @@ import timm
 from PIL import Image
 from torchvision import transforms
 
-from config import RIGID_NOISE_LEVEL, RIGID_THRESHOLD, RIGID_FAKE_IF_HIGH, DINO_HF_CACHE
+from config import RIGID_NOISE_LEVEL, RIGID_THRESHOLD, RIGID_FAKE_IF_HIGH, TIMM_DINOV2_WEIGHTS
 from utils.explanation import generate_explanation
 
 _MEAN = (0.485, 0.456, 0.406)
@@ -32,7 +32,17 @@ _device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 def _load_model() -> torch.nn.Module:
     global _model
     if _model is None:
-        m = timm.create_model("vit_large_patch14_dinov2.lvd142m", pretrained=True, img_size=224)
+        if not TIMM_DINOV2_WEIGHTS:
+            raise RuntimeError(
+                "TIMM_DINOV2_WEIGHTS is not set. Point it to the local "
+                "vit_large_patch14_dinov2.lvd142m checkpoint file."
+            )
+        m = timm.create_model(
+            "vit_large_patch14_dinov2.lvd142m",
+            pretrained=False,
+            checkpoint_path=TIMM_DINOV2_WEIGHTS,
+            img_size=224,
+        )
         m.eval().to(_device)
         _model = m
     return _model

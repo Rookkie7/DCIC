@@ -6,12 +6,21 @@ import os
 
 # ── DINOv2 shared backbone ──────────────────────────────────────────────────
 DINO_HF_CACHE   = "/root/autodl-tmp/hf_models"
-DINO_HF_MODEL   = "facebook/dinov2-large"
-TIMM_DINOV2_WEIGHTS = "/root/autodl-tmp/hf_models/timm-vit-large-dinov2/model.safetensors"
+DINO_HF_MODEL   = os.environ.get(
+    "DINO_HF_MODEL",
+    "/root/autodl-tmp/hf_models/models--facebook--dinov2-large/snapshots/47b73eefe95e8d44ec3623f8890bd894b6ea2d6c",
+)
+TIMM_DINOV2_WEIGHTS = os.environ.get(
+    "TIMM_DINOV2_WEIGHTS",
+    "/root/autodl-tmp/hf_models/timm-vit-large-dinov2/model.safetensors",
+)
 
 
 # ── DINO_CNN ─────────────────────────────────────────────────────────────────
-DINO_CNN_WEIGHTS = "/root/autodl-tmp/DINO_CNN/v3/model_seg_fpn_v1.pt"
+DINO_CNN_WEIGHTS = os.environ.get(
+    "DINO_CNN_WEIGHTS",
+    "/root/autodl-tmp/DINO_CNN/v3/model_seg_fpn_v1.pt",
+)
 DINO_CNN_IMG_SIZE = 518
 
 # ── RIGID ────────────────────────────────────────────────────────────────────

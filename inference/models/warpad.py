@@ -45,8 +45,8 @@ def _load_model():
             )
         _model = timm.create_model(
             "vit_large_patch14_dinov2.lvd142m",
-            pretrained=False,
-            checkpoint_path=TIMM_DINOV2_WEIGHTS,
+            pretrained=True,
+            pretrained_cfg_overlay={"file": TIMM_DINOV2_WEIGHTS},
             img_size=WARPAD_PATCH_SIZE,
         ).eval().to(_device)
         _dwt  = DWTForward(J=2, wave="haar").to(_device)

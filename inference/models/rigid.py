@@ -39,8 +39,8 @@ def _load_model() -> torch.nn.Module:
             )
         m = timm.create_model(
             "vit_large_patch14_dinov2.lvd142m",
-            pretrained=False,
-            checkpoint_path=TIMM_DINOV2_WEIGHTS,
+            pretrained=True,
+            pretrained_cfg_overlay={"file": TIMM_DINOV2_WEIGHTS},
             img_size=224,
         )
         m.eval().to(_device)

@@ -96,7 +96,7 @@ class SerialTaskQueue:
                     task.result = resp.json()
                     task.status = "done"
                 else:
-                    task.error  = f"Inference service error {resp.status_code}: {resp.text[:200]}"
+                    task.error = f"Inference service error {resp.status_code}: {resp.text[:4000]}"
                     task.status = "error"
             except Exception as exc:
                 task.error  = str(exc)

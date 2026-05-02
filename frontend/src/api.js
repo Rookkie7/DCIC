@@ -5,12 +5,14 @@ const MAX_POLL_MS      = 310_000;
  * Submit an image for inference.
  * @param {File}   file
  * @param {string} model  one of dino_cnn | fakeshield | rigid | warpad
+ * @param {string} explainMode  template | llm
  * @returns {Promise<string>} task_id
  */
-export async function submitImage(file, model) {
+export async function submitImage(file, model, explainMode = 'template') {
   const body = new FormData();
   body.append('file', file);
   body.append('model', model);
+  body.append('explain_mode', explainMode);
 
   const res = await fetch('/api/submit', { method: 'POST', body });
   if (!res.ok) {

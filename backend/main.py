@@ -32,10 +32,15 @@ async def health():
 @app.post("/api/submit")
 async def submit(
     model: str = Form(...),
+    explain_mode: str = Form("template"),
     file: UploadFile = File(...),
 ):
     if model not in VALID_MODELS:
         raise HTTPException(status_code=400, detail=f"Invalid model '{model}'.")
+    if explain_mode not in {"template", "llm"}:
+        raise HTTPException(status_code=400, detail="explain_mode must be 'template' or 'llm'.")
+    if explain_mode == "llm" and model != "dino_cnn":
+        raise HTTPException(status_code=400, detail="LLM reports are currently supported only for DINO + CNN.")
 
     content_type = file.content_type or ""
     if not content_type.startswith("image/"):
@@ -47,7 +52,7 @@ async def submit(
     if len(image_bytes) > 20 * 1024 * 1024:  # 20 MB limit
         raise HTTPException(status_code=413, detail="File too large (max 20 MB).")
 
-    task_id = await queue.submit(model=model, image_bytes=image_bytes)
+    task_id = await queue.submit(model=model, image_bytes=image_bytes, explain_mode=explain_mode)
     return {"task_id": task_id, "status": "queued"}
 
 

@@ -36,6 +36,7 @@ def health():
 async def infer(
     model_name: str,
     file: UploadFile = File(...),
+    explain_mode: str = Form("template"),
 ):
     if model_name not in VALID_MODELS:
         raise HTTPException(status_code=404, detail=f"Unknown model '{model_name}'. "
@@ -48,10 +49,17 @@ async def infer(
     image_bytes = await file.read()
     if len(image_bytes) == 0:
         raise HTTPException(status_code=400, detail="Empty file.")
+    if explain_mode not in {"template", "llm"}:
+        raise HTTPException(status_code=400, detail="explain_mode must be 'template' or 'llm'.")
+    if explain_mode == "llm" and model_name != "dino_cnn":
+        raise HTTPException(status_code=400, detail="LLM reports are currently supported only for dino_cnn.")
 
     t0 = time.perf_counter()
     try:
-        result = REGISTRY[model_name](image_bytes)
+        if model_name == "dino_cnn":
+            result = REGISTRY[model_name](image_bytes, explain_mode=explain_mode)
+        else:
+            result = REGISTRY[model_name](image_bytes)
     except Exception as exc:
         raise HTTPException(status_code=500, detail=str(exc))
 

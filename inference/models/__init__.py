@@ -2,9 +2,9 @@ from importlib import import_module
 
 
 def _lazy_infer(module_name: str):
-    def infer(image_bytes: bytes) -> dict:
+    def infer(image_bytes: bytes, **kwargs) -> dict:
         module = import_module(f".{module_name}", __name__)
-        return module.infer(image_bytes)
+        return module.infer(image_bytes, **kwargs)
 
     return infer
 

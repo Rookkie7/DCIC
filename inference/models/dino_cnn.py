@@ -5,16 +5,27 @@ Uses the FPN decoder from Dino-CNN/v3/models.py and the v3 TTA/post-processing.
 from __future__ import annotations
 
 import math
+import os
+import shutil
+import tempfile
 
 import cv2
 import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+from PIL import Image
 from scipy.ndimage import binary_fill_holes
 from transformers import AutoImageProcessor, AutoModel
 
-from config import DINO_HF_CACHE, DINO_HF_MODEL, DINO_CNN_WEIGHTS, DINO_CNN_IMG_SIZE
+from config import (
+    DINO_HF_CACHE,
+    DINO_HF_MODEL,
+    DINO_CNN_WEIGHTS,
+    DINO_CNN_IMG_SIZE,
+    DINO_REPORT_TMP_DIR,
+    QWEN_VL_MODEL_DIR,
+)
 from utils import mask_to_base64, overlay_to_base64
 from utils.explanation import generate_explanation
 
@@ -95,6 +106,8 @@ class _DinoSegmenter(nn.Module):
 
 
 _model: _DinoSegmenter | None = None
+_report_model = None
+_report_processor = None
 _device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 
@@ -131,7 +144,85 @@ def _post_process_v3(prob: np.ndarray) -> tuple[bool, np.ndarray]:
     return is_forged, final_mask
 
 
-def infer(image_bytes: bytes) -> dict:
+def _load_reporter():
+    global _report_model, _report_processor
+    if _report_model is None or _report_processor is None:
+        from transformers import AutoProcessor, Qwen2VLForConditionalGeneration
+
+        dtype = torch.bfloat16 if torch.cuda.is_available() else torch.float32
+        _report_model = Qwen2VLForConditionalGeneration.from_pretrained(
+            QWEN_VL_MODEL_DIR,
+            torch_dtype=dtype,
+            device_map="auto",
+            local_files_only=True,
+        )
+        _report_processor = AutoProcessor.from_pretrained(
+            QWEN_VL_MODEL_DIR,
+            local_files_only=True,
+            use_fast=True,
+        )
+    return _report_model, _report_processor
+
+
+def _report_prompt(is_forged: bool) -> str:
+    if is_forged:
+        return (
+            "你是一名图像篡改鉴定专家。输入包含两张图：第一张是原图，第二张是检测模型生成的可疑区域掩膜，"
+            "白色区域代表疑似篡改位置。请结合原图和掩膜，用中文给出专业报告：先说明图像是否疑似篡改，"
+            "再描述可疑区域的大致位置、视觉异常现象、可能的篡改方式，以及为什么这些区域在纹理、边缘、"
+            "光照、文字排版或语义逻辑上不自然。不要虚构看不见的具体文字或坐标。"
+        )
+    return (
+        "你是一名图像篡改鉴定专家。该图像经检测模型判断为真实。请用中文给出简洁专业报告，"
+        "从光照一致性、边缘/纹理连续性、文字或物体排布合理性、整体语义一致性等角度说明为什么暂未发现明显篡改迹象。"
+    )
+
+
+def _generate_llm_report(image_bgr: np.ndarray, is_forged: bool, mask: np.ndarray) -> str:
+    from qwen_vl_utils import process_vision_info
+
+    os.makedirs(DINO_REPORT_TMP_DIR, exist_ok=True)
+    run_dir = tempfile.mkdtemp(prefix="report_", dir=DINO_REPORT_TMP_DIR)
+    try:
+        image_path = os.path.join(run_dir, "image.png")
+        cv2.imwrite(image_path, image_bgr)
+
+        content = [{"type": "image", "image": image_path}]
+        if is_forged:
+            mask_path = os.path.join(run_dir, "mask.png")
+            Image.fromarray((mask.astype(np.uint8) * 255)).convert("RGB").save(mask_path)
+            content.append({"type": "image", "image": mask_path})
+
+        content.append({"type": "text", "text": _report_prompt(is_forged)})
+        messages = [{"role": "user", "content": content}]
+
+        model, processor = _load_reporter()
+        text = processor.apply_chat_template(messages, tokenize=False, add_generation_prompt=True)
+        image_inputs, video_inputs = process_vision_info(messages)
+        processor_kwargs = {
+            "text": [text],
+            "images": image_inputs,
+            "padding": True,
+            "return_tensors": "pt",
+            "min_pixels": 256 * 28 * 28,
+            "max_pixels": 1024 * 28 * 28,
+        }
+        if video_inputs is not None:
+            processor_kwargs["videos"] = video_inputs
+
+        inputs = processor(
+            **processor_kwargs,
+        ).to(next(model.parameters()).device)
+
+        with torch.no_grad():
+            generated_ids = model.generate(**inputs, max_new_tokens=512)
+        output_ids = generated_ids[:, inputs.input_ids.shape[1]:]
+        return processor.batch_decode(output_ids, skip_special_tokens=True)[0].strip()
+    finally:
+        shutil.rmtree(run_dir, ignore_errors=True)
+
+
+def infer(image_bytes: bytes, explain_mode: str = "template") -> dict:
     model = _load_model()
 
     nparr = np.frombuffer(image_bytes, np.uint8)
@@ -169,12 +260,17 @@ def infer(image_bytes: bytes) -> dict:
         mask_b64 = mask_to_base64(mask, orig_h, orig_w)
         overlay_b64 = overlay_to_base64(img_bgr, mask, orig_h, orig_w)
 
-    explanation = generate_explanation(
-        label=label,
-        model="dino_cnn",
-        mask=mask if is_forged else None,
-        confidence=confidence,
-    )
+    explanation_source = "template"
+    if explain_mode == "llm":
+        explanation = _generate_llm_report(img_bgr, is_forged, mask)
+        explanation_source = "qwen2_vl"
+    else:
+        explanation = generate_explanation(
+            label=label,
+            model="dino_cnn",
+            mask=mask if is_forged else None,
+            confidence=confidence,
+        )
 
     return {
         "label": label,
@@ -182,4 +278,5 @@ def infer(image_bytes: bytes) -> dict:
         "mask_base64": mask_b64,
         "overlay_base64": overlay_b64,
         "explanation": explanation,
+        "explanation_source": explanation_source,
     }

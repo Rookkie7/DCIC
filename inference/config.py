@@ -43,6 +43,13 @@ FAKESHIELD_WEIGHT_DIR  = "/root/autodl-tmp/FakeShield/weight/fakeshield-v1-22b"
 FAKESHIELD_SCRIPT_DIR  = "/root/autodl-tmp/FakeShield"
 FAKESHIELD_TMP_DIR     = "/tmp/fakeshield_inference"
 
+# DINO-CNN v3 report generator (Qwen2-VL)
+QWEN_VL_MODEL_DIR = os.environ.get(
+    "QWEN_VL_MODEL_DIR",
+    "/root/autodl-tmp/hf_models/Qwen2-VL-7B-Instruct",
+)
+DINO_REPORT_TMP_DIR = os.environ.get("DINO_REPORT_TMP_DIR", "/tmp/dino_cnn_reports")
+
 # ── Service ───────────────────────────────────────────────────────────────────
 HOST = "0.0.0.0"
 PORT = 8081

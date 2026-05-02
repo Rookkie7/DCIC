@@ -16,6 +16,7 @@ const card = {
 export default function App() {
   const [file,        setFile]        = useState(null);
   const [model,       setModel]       = useState('');
+  const [explainMode, setExplainMode] = useState('template');
   const [phase,       setPhase]       = useState('idle');  // idle | submitting | polling | done | error
   const [statusObj,   setStatusObj]   = useState(null);
   const [startTime,   setStartTime]   = useState(null);
@@ -44,9 +45,9 @@ export default function App() {
     setStartTime(Date.now());
 
     try {
-      const taskId = await submitImage(file, model);
+      const taskId = await submitImage(file, model, explainMode);
       setPhase('polling');
-      setStatusObj({ status: 'queued', task_id: taskId, model });
+      setStatusObj({ status: 'queued', task_id: taskId, model, explain_mode: explainMode });
 
       const final = await pollStatus(taskId, (s) => setStatusObj(s));
 
@@ -69,6 +70,7 @@ export default function App() {
   const handleReset = () => {
     setFile(null);
     setModel('');
+    setExplainMode('template');
     setPhase('idle');
     setResult(null);
     setStatusObj(null);
@@ -79,6 +81,13 @@ export default function App() {
   const isProcessing = phase === 'submitting' || phase === 'polling';
   const showStatus   = phase !== 'idle' && statusObj;
   const showResult   = phase === 'done' && result;
+
+  const handleModelChange = (nextModel) => {
+    setModel(nextModel);
+    if (nextModel !== 'dino_cnn') {
+      setExplainMode('template');
+    }
+  };
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', minHeight: '100vh' }}>
@@ -147,10 +156,46 @@ export default function App() {
           <div style={card}>
             <ModelSelector
               selected={model}
-              onChange={setModel}
+              onChange={handleModelChange}
               disabled={isProcessing}
             />
           </div>
+
+          {model === 'dino_cnn' && (
+            <div style={card}>
+              <div style={{
+                fontSize: 12,
+                fontFamily: 'var(--mono)',
+                color: 'var(--text-mute)',
+                letterSpacing: '0.06em',
+                textTransform: 'uppercase',
+                marginBottom: 12,
+              }}>
+                Report Mode
+              </div>
+              <label style={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                gap: 16,
+                cursor: isProcessing ? 'not-allowed' : 'pointer',
+                opacity: isProcessing ? 0.5 : 1,
+              }}>
+                <div>
+                  <div style={{ fontSize: 14, color: 'var(--text-dim)' }}>
+                    Qwen2-VL report
+                  </div>
+                </div>
+                <input
+                  type="checkbox"
+                  checked={explainMode === 'llm'}
+                  disabled={isProcessing}
+                  onChange={(e) => setExplainMode(e.target.checked ? 'llm' : 'template')}
+                  style={{ width: 18, height: 18, flexShrink: 0 }}
+                />
+              </label>
+            </div>
+          )}
 
           {/* Detect button */}
           <button

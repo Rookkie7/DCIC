@@ -18,6 +18,7 @@ from config import TASK_TIMEOUT
 class Task:
     task_id: str
     model: str
+    explain_mode: str
     image_bytes: bytes
     created_at: float = field(default_factory=time.time)
     status: str = "queued"        # queued | running | done | timeout | error
@@ -35,9 +36,9 @@ class SerialTaskQueue:
     def _make_id(self) -> str:
         return str(uuid.uuid4())
 
-    async def submit(self, model: str, image_bytes: bytes) -> str:
+    async def submit(self, model: str, image_bytes: bytes, explain_mode: str = "template") -> str:
         task_id = self._make_id()
-        task = Task(task_id=task_id, model=model, image_bytes=image_bytes)
+        task = Task(task_id=task_id, model=model, explain_mode=explain_mode, image_bytes=image_bytes)
         self._tasks[task_id] = task
         await self._queue.put(task_id)
         if not self._worker_started:
@@ -57,6 +58,7 @@ class SerialTaskQueue:
             "task_id": task_id,
             "status":  task.status,
             "model":   task.model,
+            "explain_mode": task.explain_mode,
         }
         if task.status == "done" and task.result:
             resp["result"] = task.result
@@ -88,6 +90,7 @@ class SerialTaskQueue:
                     resp = await client.post(
                         url,
                         files={"file": ("image.png", task.image_bytes, "image/png")},
+                        data={"explain_mode": task.explain_mode},
                     )
                 if resp.status_code == 200:
                     task.result = resp.json()

@@ -99,7 +99,7 @@ function ImagePane({ src, caption, dataType }) {
 export default function ResultPanel({ result, originalFile }) {
   if (!result) return null;
 
-  const { label, confidence, overlay_base64, mask_base64, explanation, model, elapsed_ms } = result;
+  const { label, confidence, overlay_base64, mask_base64, explanation, model, elapsed_ms, explanation_source } = result;
   const noLoc = NO_LOC_MODELS.has(model);
   const hasOverlay = !noLoc && overlay_base64;
   const originalUrl = originalFile ? URL.createObjectURL(originalFile) : null;
@@ -126,6 +126,9 @@ export default function ResultPanel({ result, originalFile }) {
         <MetaRow label="Elapsed" value={elapsed_ms != null ? `${elapsed_ms} ms` : '—'} />
         {result.raw_score != null && (
           <MetaRow label="Score" value={result.raw_score.toFixed(6)} />
+        )}
+        {explanation_source && (
+          <MetaRow label="Report" value={explanation_source === 'qwen2_vl' ? 'Qwen2-VL' : 'Template'} />
         )}
       </div>
 

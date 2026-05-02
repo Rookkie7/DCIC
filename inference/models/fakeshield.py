@@ -25,6 +25,23 @@ _DTE_PYTHON = os.environ.get("DTE_PYTHON", "python")
 _MFLM_PYTHON = os.environ.get("MFLM_PYTHON", "python")
 
 
+def _run_checked(cmd: list[str], timeout: int) -> None:
+    try:
+        subprocess.run(
+            cmd,
+            cwd=FAKESHIELD_SCRIPT_DIR,
+            check=True,
+            timeout=timeout,
+            capture_output=True,
+            text=True,
+        )
+    except subprocess.CalledProcessError as exc:
+        stderr = (exc.stderr or "").strip()
+        stdout = (exc.stdout or "").strip()
+        detail = stderr or stdout or str(exc)
+        raise RuntimeError(detail[-2000:]) from exc
+
+
 def _run_dte_fdm(image_path: str, dte_output_path: str) -> str:
     cmd = [
         _DTE_PYTHON,
@@ -38,16 +55,10 @@ def _run_dte_fdm(image_path: str, dte_output_path: str) -> str:
         image_path,
         "--output-path",
         dte_output_path,
-        "--max_new_tokens",
+        "--max-new-tokens",
         "512",
     ]
-    subprocess.run(
-        cmd,
-        cwd=FAKESHIELD_SCRIPT_DIR,
-        check=True,
-        timeout=240,
-        capture_output=True,
-    )
+    _run_checked(cmd, timeout=240)
     with open(dte_output_path, "r", encoding="utf-8") as f:
         data = json.loads(f.readline().strip())
     return data.get("outputs") or data.get("text") or ""
@@ -64,13 +75,7 @@ def _run_mflm(dte_output_path: str, mflm_output_dir: str) -> None:
         "--MFLM-output",
         mflm_output_dir,
     ]
-    subprocess.run(
-        cmd,
-        cwd=FAKESHIELD_SCRIPT_DIR,
-        check=True,
-        timeout=240,
-        capture_output=True,
-    )
+    _run_checked(cmd, timeout=240)
 
 
 def _load_mflm_mask(mflm_output_dir: str, orig_h: int, orig_w: int) -> np.ndarray | None:

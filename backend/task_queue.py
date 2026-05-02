@@ -69,7 +69,7 @@ class SerialTaskQueue:
     async def _worker(self):
         """Processes tasks serially from the queue."""
         import httpx
-        from config import INFERENCE_URL
+        from config import get_inference_url
 
         while True:
             task_id = await self._queue.get()
@@ -83,7 +83,7 @@ class SerialTaskQueue:
                 continue
 
             task.status = "running"
-            url = f"{INFERENCE_URL}/infer/{task.model}"
+            url = f"{get_inference_url(task.model)}/infer/{task.model}"
 
             try:
                 async with httpx.AsyncClient(timeout=TASK_TIMEOUT + 10) as client:

@@ -1,4 +1,4 @@
-import { useRef, useState, useCallback } from 'react';
+import { useCallback, useRef, useState } from 'react';
 
 const s = {
   zone: (active) => ({
@@ -11,9 +11,9 @@ const s = {
     flexDirection: 'column',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 12,
-    padding: 32,
-    minHeight: 200,
+    gap: 14,
+    padding: 34,
+    minHeight: 220,
     position: 'relative',
   }),
   preview: {
@@ -26,19 +26,19 @@ const s = {
   img: {
     width: '100%',
     display: 'block',
-    maxHeight: 320,
+    maxHeight: 340,
     objectFit: 'contain',
-    background: '#0a1020',
+    background: 'var(--bg-panel)',
   },
   clearBtn: {
     position: 'absolute',
     top: 8,
     right: 8,
-    background: 'rgba(15,23,42,0.85)',
+    background: 'rgba(15,19,25,0.9)',
     border: '1px solid var(--border-hi)',
     borderRadius: 6,
     color: 'var(--text-dim)',
-    padding: '3px 10px',
+    padding: '4px 10px',
     cursor: 'pointer',
     fontSize: 12,
     fontFamily: 'var(--mono)',
@@ -49,18 +49,18 @@ const s = {
     fontSize: 12,
     fontFamily: 'var(--mono)',
     color: 'var(--text-mute)',
-    letterSpacing: '0.06em',
+    letterSpacing: '0.08em',
     textTransform: 'uppercase',
   },
   hint: {
-    fontSize: 13,
+    fontSize: 15,
     color: 'var(--text-dim)',
     textAlign: 'center',
     lineHeight: 1.5,
   },
   icon: {
-    width: 40,
-    height: 40,
+    width: 42,
+    height: 42,
     color: 'var(--text-mute)',
   },
 };
@@ -72,13 +72,13 @@ export default function UploadPanel({ file, onFileChange }) {
   const handleDrop = useCallback((e) => {
     e.preventDefault();
     setDragging(false);
-    const f = e.dataTransfer.files[0];
-    if (f && f.type.startsWith('image/')) onFileChange(f);
+    const nextFile = e.dataTransfer.files[0];
+    if (nextFile && nextFile.type.startsWith('image/')) onFileChange(nextFile);
   }, [onFileChange]);
 
   const handleChange = (e) => {
-    const f = e.target.files[0];
-    if (f) onFileChange(f);
+    const nextFile = e.target.files[0];
+    if (nextFile) onFileChange(nextFile);
     e.target.value = '';
   };
 
@@ -106,8 +106,8 @@ export default function UploadPanel({ file, onFileChange }) {
             <div style={{ color: 'var(--text-dim)', marginBottom: 4 }}>
               Drop an image here or click to browse
             </div>
-            <div style={{ fontSize: 12, color: 'var(--text-mute)' }}>
-              JPEG, PNG — max 20 MB
+            <div style={{ fontSize: 13, color: 'var(--text-mute)' }}>
+              JPEG, PNG / max 20 MB
             </div>
           </div>
           <input
@@ -125,14 +125,14 @@ export default function UploadPanel({ file, onFileChange }) {
             Remove
           </button>
           <div style={{
-            padding: '6px 12px',
-            fontSize: 11,
+            padding: '8px 12px',
+            fontSize: 12,
             fontFamily: 'var(--mono)',
             color: 'var(--text-mute)',
             borderTop: '1px solid var(--border)',
             background: 'var(--bg-card)',
           }}>
-            {file.name} &nbsp;·&nbsp; {(file.size / 1024).toFixed(0)} KB
+            {file.name} &nbsp;/&nbsp; {(file.size / 1024).toFixed(0)} KB
           </div>
         </div>
       )}

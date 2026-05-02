@@ -1,18 +1,13 @@
-"""
-Local backend FastAPI service.
-Runs on localhost:8000.
-Forwards inference requests to the cloud server via SSH tunnel (localhost:8081).
-
-Start:
-    uvicorn main:app --host 0.0.0.0 --port 8000 --reload
-"""
+"""Local backend FastAPI service."""
 from fastapi import FastAPI, File, Form, UploadFile, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 
+from batch_queue import batch_queue
 from task_queue import queue
 import config
 
-app = FastAPI(title="DCIC Forgery Detection — Local Backend", version="1.0.0")
+
+app = FastAPI(title="DCIC Forgery Detection Local Backend", version="1.1.0")
 
 app.add_middleware(
     CORSMiddleware,
@@ -22,6 +17,15 @@ app.add_middleware(
 )
 
 VALID_MODELS = {"dino_cnn", "fakeshield", "rigid", "warpad"}
+
+
+def validate_model_options(model: str, explain_mode: str) -> None:
+    if model not in VALID_MODELS:
+        raise HTTPException(status_code=400, detail=f"Invalid model '{model}'.")
+    if explain_mode not in {"template", "llm"}:
+        raise HTTPException(status_code=400, detail="explain_mode must be 'template' or 'llm'.")
+    if explain_mode == "llm" and model != "dino_cnn":
+        raise HTTPException(status_code=400, detail="LLM reports are currently supported only for DINO + CNN.")
 
 
 @app.get("/api/health")
@@ -35,12 +39,7 @@ async def submit(
     explain_mode: str = Form("template"),
     file: UploadFile = File(...),
 ):
-    if model not in VALID_MODELS:
-        raise HTTPException(status_code=400, detail=f"Invalid model '{model}'.")
-    if explain_mode not in {"template", "llm"}:
-        raise HTTPException(status_code=400, detail="explain_mode must be 'template' or 'llm'.")
-    if explain_mode == "llm" and model != "dino_cnn":
-        raise HTTPException(status_code=400, detail="LLM reports are currently supported only for DINO + CNN.")
+    validate_model_options(model, explain_mode)
 
     content_type = file.content_type or ""
     if not content_type.startswith("image/"):
@@ -49,7 +48,7 @@ async def submit(
     image_bytes = await file.read()
     if len(image_bytes) == 0:
         raise HTTPException(status_code=400, detail="Empty file.")
-    if len(image_bytes) > 20 * 1024 * 1024:  # 20 MB limit
+    if len(image_bytes) > 20 * 1024 * 1024:
         raise HTTPException(status_code=413, detail="File too large (max 20 MB).")
 
     task_id = await queue.submit(model=model, image_bytes=image_bytes, explain_mode=explain_mode)
@@ -64,6 +63,39 @@ async def status(task_id: str):
     return result
 
 
+@app.post("/api/batch/submit")
+async def submit_batch(
+    model: str = Form(...),
+    folder_path: str = Form(...),
+    explain_mode: str = Form("template"),
+    recursive: bool = Form(False),
+):
+    validate_model_options(model, explain_mode)
+    if not folder_path.strip():
+        raise HTTPException(status_code=400, detail="folder_path is required.")
+
+    try:
+        batch_id, total = await batch_queue.submit(
+            model=model,
+            folder_path=folder_path.strip(),
+            explain_mode=explain_mode,
+            recursive=recursive,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    return {"batch_id": batch_id, "status": "queued", "total": total}
+
+
+@app.get("/api/batch/status/{batch_id}")
+async def batch_status(batch_id: str):
+    result = batch_queue.get_status(batch_id)
+    if result is None:
+        raise HTTPException(status_code=404, detail="Batch task not found.")
+    return result
+
+
 if __name__ == "__main__":
     import uvicorn
+
     uvicorn.run("main:app", host=config.HOST, port=config.PORT, reload=True)

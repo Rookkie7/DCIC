@@ -1,11 +1,11 @@
-import { useState, useCallback } from 'react';
-import UploadPanel    from './components/UploadPanel';
-import ModelSelector  from './components/ModelSelector';
-import StatusBar      from './components/StatusBar';
-import ResultPanel    from './components/ResultPanel';
+import { useCallback, useState } from 'react';
+import BatchPanel from './components/BatchPanel';
+import UploadPanel from './components/UploadPanel';
+import ModelSelector from './components/ModelSelector';
+import StatusBar from './components/StatusBar';
+import ResultPanel from './components/ResultPanel';
 import { submitImage, pollStatus } from './api';
 
-/* ── Shared card style ──────────────────────────────────────────────────────── */
 const card = {
   background: 'var(--bg-card)',
   border: '1px solid var(--border)',
@@ -13,21 +13,64 @@ const card = {
   padding: 24,
 };
 
-export default function App() {
-  const [file,        setFile]        = useState(null);
-  const [model,       setModel]       = useState('');
+const sectionLabel = {
+  fontSize: 12,
+  fontFamily: 'var(--mono)',
+  color: 'var(--text-mute)',
+  letterSpacing: '0.08em',
+  textTransform: 'uppercase',
+  marginBottom: 12,
+};
+
+function Header({ view, onViewChange }) {
+  const tabs = [
+    { id: 'single', label: 'Single Image' },
+    { id: 'batch', label: 'Batch Folder' },
+  ];
+
+  return (
+    <header className="app-header">
+      <div className="brand-group">
+        <div className="brand-mark">DCIC</div>
+        <div>
+          <div className="brand-title">Forgery Analysis Console</div>
+          <div className="brand-subtitle">Image authentication and localization</div>
+        </div>
+      </div>
+
+      <nav className="view-tabs" aria-label="Workflow">
+        {tabs.map((tab) => (
+          <button
+            key={tab.id}
+            type="button"
+            className={`view-tab ${view === tab.id ? 'active' : ''}`}
+            onClick={() => onViewChange(tab.id)}
+          >
+            {tab.label}
+          </button>
+        ))}
+      </nav>
+    </header>
+  );
+}
+
+function SingleImagePanel() {
+  const [file, setFile] = useState(null);
+  const [model, setModel] = useState('');
   const [explainMode, setExplainMode] = useState('template');
-  const [phase,       setPhase]       = useState('idle');  // idle | submitting | polling | done | error
-  const [statusObj,   setStatusObj]   = useState(null);
-  const [startTime,   setStartTime]   = useState(null);
-  const [result,      setResult]      = useState(null);
-  const [errorMsg,    setErrorMsg]    = useState('');
+  const [phase, setPhase] = useState('idle');
+  const [statusObj, setStatusObj] = useState(null);
+  const [startTime, setStartTime] = useState(null);
+  const [result, setResult] = useState(null);
+  const [errorMsg, setErrorMsg] = useState('');
 
+  const isProcessing = phase === 'submitting' || phase === 'polling';
   const canDetect = file && model && phase === 'idle';
+  const showStatus = phase !== 'idle' && statusObj;
+  const showResult = phase === 'done' && result;
 
-  const handleFileChange = useCallback((f) => {
-    setFile(f);
-    // Reset results when a new file is chosen
+  const handleFileChange = useCallback((nextFile) => {
+    setFile(nextFile);
     if (phase !== 'idle') {
       setPhase('idle');
       setResult(null);
@@ -35,6 +78,13 @@ export default function App() {
       setErrorMsg('');
     }
   }, [phase]);
+
+  const handleModelChange = (nextModel) => {
+    setModel(nextModel);
+    if (nextModel !== 'dino_cnn') {
+      setExplainMode('template');
+    }
+  };
 
   const handleDetect = async () => {
     if (!canDetect) return;
@@ -49,7 +99,7 @@ export default function App() {
       setPhase('polling');
       setStatusObj({ status: 'queued', task_id: taskId, model, explain_mode: explainMode });
 
-      const final = await pollStatus(taskId, (s) => setStatusObj(s));
+      const final = await pollStatus(taskId, setStatusObj);
 
       if (final.status === 'done' && final.result) {
         setResult(final.result);
@@ -78,228 +128,83 @@ export default function App() {
     setStartTime(null);
   };
 
-  const isProcessing = phase === 'submitting' || phase === 'polling';
-  const showStatus   = phase !== 'idle' && statusObj;
-  const showResult   = phase === 'done' && result;
+  return (
+    <div className="workspace-grid">
+      <div className="control-stack">
+        <div style={card}>
+          <UploadPanel file={file} onFileChange={handleFileChange} />
+        </div>
 
-  const handleModelChange = (nextModel) => {
-    setModel(nextModel);
-    if (nextModel !== 'dino_cnn') {
-      setExplainMode('template');
-    }
-  };
+        <div style={card}>
+          <ModelSelector selected={model} onChange={handleModelChange} disabled={isProcessing} />
+        </div>
+
+        {model === 'dino_cnn' && (
+          <div style={card}>
+            <div style={sectionLabel}>Report Mode</div>
+            <label className="switch-row">
+              <span>Qwen2-VL report</span>
+              <input
+                type="checkbox"
+                checked={explainMode === 'llm'}
+                disabled={isProcessing}
+                onChange={(e) => setExplainMode(e.target.checked ? 'llm' : 'template')}
+              />
+            </label>
+          </div>
+        )}
+
+        <button
+          onClick={handleDetect}
+          disabled={!canDetect}
+          className="primary-action"
+        >
+          {isProcessing ? 'Processing...' : 'Detect Image'}
+        </button>
+
+        {phase !== 'idle' && !isProcessing && (
+          <button onClick={handleReset} className="ghost-action">New Detection</button>
+        )}
+      </div>
+
+      <div className="result-stack">
+        {showStatus && (
+          <div style={card}>
+            <StatusBar status={statusObj.status} startTime={startTime} errorMsg={errorMsg} />
+          </div>
+        )}
+
+        {showResult && (
+          <div style={card}>
+            <ResultPanel result={result} originalFile={file} />
+          </div>
+        )}
+
+        {phase === 'error' && !showStatus && (
+          <div style={{ ...card, borderColor: 'rgba(239,68,68,0.3)', color: 'var(--red)' }}>
+            {errorMsg}
+          </div>
+        )}
+
+        {phase === 'idle' && (
+          <div className="empty-panel">
+            <div className="empty-icon">S</div>
+            <div>Upload an image and select a model to begin analysis.</div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+export default function App() {
+  const [view, setView] = useState('single');
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', minHeight: '100vh' }}>
-
-      {/* ── Header ─────────────────────────────────────────────────────────── */}
-      <header style={{
-        borderBottom: '1px solid var(--border)',
-        padding: '0 32px',
-        height: 56,
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        flexShrink: 0,
-      }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
-          {/* NUS wordmark placeholder */}
-          <div style={{
-            fontFamily: 'var(--mono)',
-            fontSize: 13,
-            fontWeight: 600,
-            color: 'var(--blue)',
-            letterSpacing: '0.08em',
-            padding: '3px 8px',
-            border: '1px solid var(--blue-dim)',
-            borderRadius: 4,
-          }}>
-            NUS
-          </div>
-          <div style={{ width: 1, height: 20, background: 'var(--border)' }} />
-          <div style={{ fontWeight: 500, color: 'var(--text)', letterSpacing: '0.01em' }}>
-            Image Forgery Detection
-          </div>
-        </div>
-        <div style={{
-          fontFamily: 'var(--mono)',
-          fontSize: 11,
-          color: 'var(--text-mute)',
-          letterSpacing: '0.06em',
-        }}>
-          ISY5004 · 2025
-        </div>
-      </header>
-
-      {/* ── Main layout ────────────────────────────────────────────────────── */}
-      <main style={{
-        flex: 1,
-        display: 'grid',
-        gridTemplateColumns: '380px 1fr',
-        gap: 24,
-        padding: 24,
-        maxWidth: 1200,
-        width: '100%',
-        margin: '0 auto',
-        alignItems: 'start',
-      }}>
-
-        {/* ── Left column: controls ───────────────────────────────────────── */}
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-
-          {/* Upload */}
-          <div style={card}>
-            <UploadPanel file={file} onFileChange={handleFileChange} />
-          </div>
-
-          {/* Model selector */}
-          <div style={card}>
-            <ModelSelector
-              selected={model}
-              onChange={handleModelChange}
-              disabled={isProcessing}
-            />
-          </div>
-
-          {model === 'dino_cnn' && (
-            <div style={card}>
-              <div style={{
-                fontSize: 12,
-                fontFamily: 'var(--mono)',
-                color: 'var(--text-mute)',
-                letterSpacing: '0.06em',
-                textTransform: 'uppercase',
-                marginBottom: 12,
-              }}>
-                Report Mode
-              </div>
-              <label style={{
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'space-between',
-                gap: 16,
-                cursor: isProcessing ? 'not-allowed' : 'pointer',
-                opacity: isProcessing ? 0.5 : 1,
-              }}>
-                <div>
-                  <div style={{ fontSize: 14, color: 'var(--text-dim)' }}>
-                    Qwen2-VL report
-                  </div>
-                </div>
-                <input
-                  type="checkbox"
-                  checked={explainMode === 'llm'}
-                  disabled={isProcessing}
-                  onChange={(e) => setExplainMode(e.target.checked ? 'llm' : 'template')}
-                  style={{ width: 18, height: 18, flexShrink: 0 }}
-                />
-              </label>
-            </div>
-          )}
-
-          {/* Detect button */}
-          <button
-            onClick={handleDetect}
-            disabled={!canDetect}
-            style={{
-              width: '100%',
-              padding: '13px 0',
-              borderRadius: 'var(--radius)',
-              border: 'none',
-              background: canDetect ? 'var(--blue)' : 'var(--bg-card)',
-              color: canDetect ? '#fff' : 'var(--text-mute)',
-              fontFamily: 'var(--mono)',
-              fontSize: 13,
-              fontWeight: 600,
-              letterSpacing: '0.08em',
-              textTransform: 'uppercase',
-              cursor: canDetect ? 'pointer' : 'not-allowed',
-              border: `1px solid ${canDetect ? 'var(--blue)' : 'var(--border)'}`,
-              transition: 'all 0.18s ease',
-            }}
-          >
-            {isProcessing ? 'Processing...' : 'Detect'}
-          </button>
-
-          {/* Reset button (visible after processing) */}
-          {phase !== 'idle' && !isProcessing && (
-            <button
-              onClick={handleReset}
-              style={{
-                width: '100%',
-                padding: '10px 0',
-                borderRadius: 'var(--radius)',
-                border: '1px solid var(--border)',
-                background: 'transparent',
-                color: 'var(--text-mute)',
-                fontFamily: 'var(--mono)',
-                fontSize: 12,
-                letterSpacing: '0.06em',
-                cursor: 'pointer',
-                transition: 'all 0.18s ease',
-              }}
-            >
-              New Detection
-            </button>
-          )}
-        </div>
-
-        {/* ── Right column: status + results ──────────────────────────────── */}
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-
-          {/* Status bar */}
-          {showStatus && (
-            <div style={card}>
-              <StatusBar
-                status={statusObj.status}
-                startTime={startTime}
-                errorMsg={errorMsg}
-              />
-            </div>
-          )}
-
-          {/* Result panel */}
-          {showResult && (
-            <div style={card}>
-              <ResultPanel result={result} originalFile={file} />
-            </div>
-          )}
-
-          {/* Error with no result */}
-          {phase === 'error' && !showStatus && (
-            <div style={{
-              ...card,
-              borderColor: 'rgba(239,68,68,0.3)',
-              color: 'var(--red)',
-              fontFamily: 'var(--mono)',
-              fontSize: 13,
-            }}>
-              {errorMsg}
-            </div>
-          )}
-
-          {/* Empty state */}
-          {phase === 'idle' && (
-            <div style={{
-              display: 'flex',
-              flexDirection: 'column',
-              alignItems: 'center',
-              justifyContent: 'center',
-              minHeight: 300,
-              gap: 16,
-              color: 'var(--text-mute)',
-            }}>
-              <svg width="48" height="48" fill="none" stroke="currentColor" viewBox="0 0 24 24"
-                style={{ opacity: 0.3 }}>
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1}
-                  d="M9 12.75L11.25 15 15 9.75m-3-7.036A11.959 11.959 0 013.598 6 11.99 11.99 0 003 9.749c0 5.592 3.824 10.29 9 11.623 5.176-1.332 9-6.03 9-11.622 0-1.31-.21-2.571-.598-3.751h-.152c-3.196 0-6.1-1.248-8.25-3.285z" />
-              </svg>
-              <div style={{ fontSize: 13, textAlign: 'center', maxWidth: 260, lineHeight: 1.6 }}>
-                Upload an image and select a model to begin forgery analysis.
-              </div>
-            </div>
-          )}
-        </div>
+    <div className="app-shell">
+      <Header view={view} onViewChange={setView} />
+      <main className="app-main">
+        {view === 'batch' ? <BatchPanel /> : <SingleImagePanel />}
       </main>
     </div>
   );

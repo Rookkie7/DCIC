@@ -8,8 +8,8 @@ const MODELS = [
   {
     id: 'fakeshield',
     label: 'FakeShield',
-    tag: 'MLLM · ICLR 2025',
-    desc: 'Multimodal LLM pipeline (DTE-FDM + MFLM). Produces natural-language explanations and segmentation masks.',
+    tag: 'MLLM / ICLR 2025',
+    desc: 'Multimodal LLM pipeline with DTE-FDM and MFLM. Produces explanations and segmentation masks.',
   },
   {
     id: 'rigid',
@@ -20,8 +20,8 @@ const MODELS = [
   {
     id: 'warpad',
     label: 'WaRPAD',
-    tag: 'Training-free · NeurIPS 2025',
-    desc: 'Wavelet-patch robustness analysis with DINOv2. Classification only; limited on traditional manipulations.',
+    tag: 'Training-free / NeurIPS 2025',
+    desc: 'Wavelet-patch robustness analysis with DINOv2. Classification only.',
   },
 ];
 
@@ -32,13 +32,13 @@ export default function ModelSelector({ selected, onChange, disabled }) {
         fontSize: 12,
         fontFamily: 'var(--mono)',
         color: 'var(--text-mute)',
-        letterSpacing: '0.06em',
+        letterSpacing: '0.08em',
         textTransform: 'uppercase',
         marginBottom: 12,
       }}>
         Detection Model
       </div>
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
         {MODELS.map((m) => {
           const active = selected === m.id;
           return (
@@ -47,20 +47,19 @@ export default function ModelSelector({ selected, onChange, disabled }) {
               style={{
                 display: 'flex',
                 gap: 14,
-                padding: '12px 16px',
+                padding: '14px 16px',
                 borderRadius: 'var(--radius)',
                 border: `1px solid ${active ? 'var(--blue)' : 'var(--border)'}`,
                 background: active ? 'var(--blue-glow)' : 'var(--bg-card)',
                 cursor: disabled ? 'not-allowed' : 'pointer',
-                opacity: disabled ? 0.5 : 1,
+                opacity: disabled ? 0.55 : 1,
                 transition: 'all 0.18s ease',
               }}
             >
-              {/* Radio dot */}
               <div style={{
-                marginTop: 2,
-                width: 16,
-                height: 16,
+                marginTop: 4,
+                width: 17,
+                height: 17,
                 borderRadius: '50%',
                 border: `2px solid ${active ? 'var(--blue)' : 'var(--border-hi)'}`,
                 background: active ? 'var(--blue)' : 'transparent',
@@ -68,14 +67,13 @@ export default function ModelSelector({ selected, onChange, disabled }) {
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
-                transition: 'all 0.18s ease',
               }}>
                 {active && (
                   <div style={{
-                    width: 6,
-                    height: 6,
+                    width: 7,
+                    height: 7,
                     borderRadius: '50%',
-                    background: '#fff',
+                    background: '#06131f',
                   }} />
                 )}
               </div>
@@ -93,12 +91,13 @@ export default function ModelSelector({ selected, onChange, disabled }) {
                 <div style={{
                   display: 'flex',
                   alignItems: 'center',
+                  flexWrap: 'wrap',
                   gap: 8,
-                  marginBottom: 3,
+                  marginBottom: 4,
                 }}>
                   <span style={{
-                    fontWeight: 500,
-                    fontSize: 14,
+                    fontWeight: 700,
+                    fontSize: 15,
                     color: active ? 'var(--text)' : 'var(--text-dim)',
                   }}>
                     {m.label}
@@ -107,18 +106,16 @@ export default function ModelSelector({ selected, onChange, disabled }) {
                     fontSize: 10,
                     fontFamily: 'var(--mono)',
                     color: active ? 'var(--blue)' : 'var(--text-mute)',
-                    background: active ? 'rgba(59,130,246,0.12)' : 'transparent',
-                    border: `1px solid ${active ? 'rgba(59,130,246,0.3)' : 'transparent'}`,
+                    border: `1px solid ${active ? 'rgba(58,167,255,0.35)' : 'var(--border)'}`,
                     borderRadius: 4,
                     padding: '1px 6px',
                     letterSpacing: '0.04em',
-                    flexShrink: 0,
                   }}>
                     {m.tag}
                   </span>
                 </div>
                 <div style={{
-                  fontSize: 12,
+                  fontSize: 13,
                   color: 'var(--text-mute)',
                   lineHeight: 1.5,
                 }}>

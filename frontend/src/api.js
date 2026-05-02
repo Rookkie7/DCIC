@@ -1,5 +1,6 @@
 const POLL_INTERVAL_MS = 2000;
 const MAX_POLL_MS      = 310_000;
+const MAX_BATCH_POLL_MS = 43_200_000;
 
 /**
  * Submit an image for inference.
@@ -40,6 +41,56 @@ export async function pollStatus(taskId, onUpdate) {
         onUpdate(data);
 
         if (['done', 'timeout', 'error'].includes(data.status)) {
+          resolve(data);
+          return;
+        }
+        if (Date.now() >= deadline) {
+          resolve({ ...data, status: 'timeout' });
+          return;
+        }
+        setTimeout(tick, POLL_INTERVAL_MS);
+      } catch (err) {
+        reject(err);
+      }
+    };
+    setTimeout(tick, POLL_INTERVAL_MS);
+  });
+}
+
+/**
+ * Submit a folder path for batch inference.
+ * The folder must be visible to the local backend process.
+ */
+export async function submitBatch(folderPath, model, explainMode = 'template', recursive = false) {
+  const body = new FormData();
+  body.append('folder_path', folderPath);
+  body.append('model', model);
+  body.append('explain_mode', explainMode);
+  body.append('recursive', recursive ? 'true' : 'false');
+
+  const res = await fetch('/api/batch/submit', { method: 'POST', body });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ detail: res.statusText }));
+    throw new Error(err.detail ?? 'Batch submit failed');
+  }
+  return res.json();
+}
+
+/**
+ * Poll /api/batch/status/{batchId} until the batch is complete.
+ */
+export async function pollBatchStatus(batchId, onUpdate) {
+  const deadline = Date.now() + MAX_BATCH_POLL_MS;
+
+  return new Promise((resolve, reject) => {
+    const tick = async () => {
+      try {
+        const res = await fetch(`/api/batch/status/${batchId}`);
+        if (!res.ok) throw new Error(`Batch status check failed: ${res.status}`);
+        const data = await res.json();
+        onUpdate(data);
+
+        if (['done', 'error'].includes(data.status)) {
           resolve(data);
           return;
         }

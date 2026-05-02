@@ -1,6 +1,7 @@
 """Local backend FastAPI service."""
 from fastapi import FastAPI, File, Form, UploadFile, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse
 
 from batch_queue import batch_queue
 from task_queue import queue
@@ -93,6 +94,14 @@ async def batch_status(batch_id: str):
     if result is None:
         raise HTTPException(status_code=404, detail="Batch task not found.")
     return result
+
+
+@app.get("/api/batch/image/{batch_id}/{index}")
+async def batch_image(batch_id: str, index: int):
+    image_path = batch_queue.get_image_path(batch_id, index)
+    if image_path is None:
+        raise HTTPException(status_code=404, detail="Batch image not found.")
+    return FileResponse(image_path)
 
 
 if __name__ == "__main__":

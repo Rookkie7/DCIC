@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react';
 import ModelSelector from './ModelSelector';
+import ResultPanel from './ResultPanel';
 import { pollBatchStatus, submitBatch } from '../api';
 
 const card = {
@@ -104,7 +105,7 @@ function BatchSummary({ batch }) {
   );
 }
 
-function ResultTable({ items }) {
+function ResultTable({ items, selectedIndex, onSelect }) {
   if (!items?.length) return null;
 
   return (
@@ -125,14 +126,24 @@ function ResultTable({ items }) {
               <th style={th}>Confidence</th>
               <th style={th}>Elapsed</th>
               <th style={th}>Message</th>
+              <th style={th}></th>
             </tr>
           </thead>
           <tbody>
-            {items.map((item) => {
+            {items.map((item, index) => {
               const result = item.result || {};
               const isFake = result.label === 'fake';
+              const selectable = item.status === 'done' || item.status === 'error';
               return (
-                <tr key={item.file_path} style={{ borderTop: '1px solid var(--border)' }}>
+                <tr
+                  key={item.file_path}
+                  onClick={() => selectable && onSelect(index)}
+                  style={{
+                    borderTop: '1px solid var(--border)',
+                    background: selectedIndex === index ? 'var(--blue-glow)' : 'transparent',
+                    cursor: selectable ? 'pointer' : 'default',
+                  }}
+                >
                   <td style={{ ...td, color: 'var(--text)', maxWidth: 260 }}>
                     <div style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                       {item.file_name}
@@ -167,8 +178,30 @@ function ResultTable({ items }) {
                   </td>
                   <td style={{ ...td, color: item.error ? 'var(--red)' : 'var(--text-mute)', maxWidth: 320 }}>
                     <div style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                      {item.error || result.explanation || '-'}
+                      {item.error || (result.explanation ? `${result.explanation.slice(0, 96)}...` : '-')}
                     </div>
+                  </td>
+                  <td style={td}>
+                    <button
+                      type="button"
+                      disabled={!selectable}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        if (selectable) onSelect(index);
+                      }}
+                      style={{
+                        border: '1px solid var(--border-hi)',
+                        borderRadius: 6,
+                        background: selectable ? 'var(--bg-hover)' : 'transparent',
+                        color: selectable ? 'var(--text)' : 'var(--text-mute)',
+                        padding: '5px 10px',
+                        fontSize: 12,
+                        fontFamily: 'var(--mono)',
+                        cursor: selectable ? 'pointer' : 'not-allowed',
+                      }}
+                    >
+                      Open
+                    </button>
                   </td>
                 </tr>
               );
@@ -194,6 +227,54 @@ const td = {
   verticalAlign: 'top',
 };
 
+function BatchDetail({ batch, item, index, onBack }) {
+  const result = item?.result;
+  const imageUrl = `/api/batch/image/${batch.batch_id}/${index}`;
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }} className="animate-fadein">
+      <div style={card}>
+        <button
+          type="button"
+          onClick={onBack}
+          className="ghost-action"
+          style={{ width: 'auto', padding: '8px 12px', marginBottom: 14 }}
+        >
+          Back to List
+        </button>
+        <div style={sectionLabel}>Selected Result</div>
+        <div style={{ fontSize: 20, fontWeight: 700, color: 'var(--text)', wordBreak: 'break-word' }}>
+          {item.file_name}
+        </div>
+        <div style={{
+          marginTop: 6,
+          fontFamily: 'var(--mono)',
+          fontSize: 12,
+          color: item.status === 'error' ? 'var(--red)' : item.status === 'done' ? 'var(--green)' : 'var(--blue)',
+          textTransform: 'uppercase',
+          letterSpacing: '0.06em',
+        }}>
+          {item.status}
+        </div>
+      </div>
+
+      {result ? (
+        <div style={card}>
+          <ResultPanel result={result} originalUrl={imageUrl} />
+        </div>
+      ) : (
+        <div style={{
+          ...card,
+          color: item.error ? 'var(--red)' : 'var(--text-dim)',
+          wordBreak: 'break-word',
+        }}>
+          {item.error || 'This image has not finished processing yet.'}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function BatchPanel() {
   const [folderPath, setFolderPath] = useState('');
   const [recursive, setRecursive] = useState(false);
@@ -202,11 +283,13 @@ export default function BatchPanel() {
   const [phase, setPhase] = useState('idle');
   const [batch, setBatch] = useState(null);
   const [errorMsg, setErrorMsg] = useState('');
+  const [selectedIndex, setSelectedIndex] = useState(null);
 
   const isProcessing = phase === 'submitting' || phase === 'polling';
   const canStart = folderPath.trim() && model && !isProcessing;
 
   const visibleItems = useMemo(() => batch?.items || [], [batch]);
+  const selectedItem = selectedIndex != null ? visibleItems[selectedIndex] : null;
 
   const handleModelChange = (nextModel) => {
     setModel(nextModel);
@@ -220,6 +303,7 @@ export default function BatchPanel() {
     setPhase('submitting');
     setErrorMsg('');
     setBatch(null);
+    setSelectedIndex(null);
 
     try {
       const created = await submitBatch(folderPath.trim(), model, explainMode, recursive);
@@ -242,6 +326,7 @@ export default function BatchPanel() {
     setPhase('idle');
     setBatch(null);
     setErrorMsg('');
+    setSelectedIndex(null);
   };
 
   return (
@@ -318,7 +403,14 @@ export default function BatchPanel() {
       </div>
 
       <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-        {batch ? <BatchSummary batch={batch} /> : (
+        {selectedItem ? (
+          <BatchDetail
+            batch={batch}
+            item={selectedItem}
+            index={selectedIndex}
+            onBack={() => setSelectedIndex(null)}
+          />
+        ) : batch ? <BatchSummary batch={batch} /> : (
           <div className="empty-panel">
             <div className="empty-icon">B</div>
             <div>Enter a folder path, select one model, and start a batch run.</div>
@@ -331,7 +423,13 @@ export default function BatchPanel() {
           </div>
         )}
 
-        <ResultTable items={visibleItems} />
+        {!selectedItem && (
+          <ResultTable
+            items={visibleItems}
+            selectedIndex={selectedIndex}
+            onSelect={setSelectedIndex}
+          />
+        )}
       </div>
     </div>
   );

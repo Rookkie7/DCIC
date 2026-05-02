@@ -94,7 +94,7 @@ function ImagePane({ src, caption, dataType = 'png' }) {
   );
 }
 
-export default function ResultPanel({ result, originalFile }) {
+export default function ResultPanel({ result, originalFile, originalUrl: originalUrlProp }) {
   if (!result) return null;
 
   const {
@@ -110,7 +110,7 @@ export default function ResultPanel({ result, originalFile }) {
   const noLoc = NO_LOC_MODELS.has(model);
   const hasOverlay = !noLoc && overlay_base64;
   const hasMask = !noLoc && mask_base64;
-  const originalUrl = originalFile ? URL.createObjectURL(originalFile) : null;
+  const originalUrl = originalUrlProp || (originalFile ? URL.createObjectURL(originalFile) : null);
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }} className="animate-fadein">
@@ -135,7 +135,7 @@ export default function ResultPanel({ result, originalFile }) {
         )}
       </div>
 
-      {hasOverlay && originalUrl && (
+      {originalUrl && (
         <div style={{ display: 'flex', gap: 14, flexWrap: 'wrap' }}>
           <div style={{ flex: 1, minWidth: 240 }}>
             <div style={{
@@ -161,7 +161,7 @@ export default function ResultPanel({ result, originalFile }) {
               />
             </div>
           </div>
-          <ImagePane src={overlay_base64} caption="Localization" dataType="jpeg" />
+          {hasOverlay && <ImagePane src={overlay_base64} caption="Localization" dataType="jpeg" />}
           {hasMask && <ImagePane src={mask_base64} caption="Mask" dataType="png" />}
         </div>
       )}

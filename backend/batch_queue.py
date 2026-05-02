@@ -105,6 +105,15 @@ class BatchTaskQueue:
             return None
         return self._serialize(task)
 
+    def get_image_path(self, batch_id: str, index: int) -> Path | None:
+        task = self._tasks.get(batch_id)
+        if task is None or index < 0 or index >= len(task.items):
+            return None
+        path = Path(task.items[index].file_path)
+        if not path.exists() or not path.is_file():
+            return None
+        return path
+
     def _serialize(self, task: BatchTask) -> dict[str, Any]:
         payload: dict[str, Any] = {
             "batch_id": task.batch_id,

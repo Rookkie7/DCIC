@@ -3,6 +3,8 @@ In-process serial task queue.
 Only one inference job runs at a time; others wait in queue.
 Tasks expire after TASK_TIMEOUT seconds.
 """
+from __future__ import annotations
+
 import asyncio
 import time
 import uuid

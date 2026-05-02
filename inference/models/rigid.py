@@ -3,6 +3,8 @@ RIGID inference wrapper (training-free).
 Calibrated threshold for DCIC data: similarity >= 0.8747 → FAKE
 (direction inverted from original paper; see cc-output/02_model_analysis.md).
 """
+from __future__ import annotations
+
 import cv2
 import numpy as np
 import torch

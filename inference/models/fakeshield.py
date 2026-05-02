@@ -8,6 +8,8 @@ Expected environment on cloud server:
   - /root/envs/mflm/  : conda env with transformers==4.28.0
   (or use the pip-install-on-the-fly approach from cli_demo.sh as fallback)
 """
+from __future__ import annotations
+
 import base64
 import json
 import os

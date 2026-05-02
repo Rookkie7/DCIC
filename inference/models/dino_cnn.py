@@ -2,6 +2,8 @@
 DINO_CNN inference wrapper.
 Loads DinoSegmenter once at startup and runs single-image inference.
 """
+from __future__ import annotations
+
 import math
 import cv2
 import numpy as np

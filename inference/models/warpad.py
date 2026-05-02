@@ -3,6 +3,8 @@ WaRPAD inference wrapper (training-free, wavelet-patch based).
 Calibrated threshold for DCIC data: mean_sim < 0.9424 → FAKE.
 Note: AUC ≈ 0.50 on DCIC data — limited detection capability.
 """
+from __future__ import annotations
+
 import cv2
 import numpy as np
 import torch

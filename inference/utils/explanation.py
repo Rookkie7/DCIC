@@ -2,6 +2,8 @@
 Rule-based explanation template generator (English output).
 Used by DINO_CNN, RIGID, and WaRPAD (FakeShield uses DTE-FDM output directly).
 """
+from __future__ import annotations
+
 import numpy as np
 from .postprocess import mask_centroid_label
 

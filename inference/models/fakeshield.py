@@ -15,7 +15,15 @@ import uuid
 import cv2
 import numpy as np
 
-from config import FAKESHIELD_SCRIPT_DIR, FAKESHIELD_TMP_DIR, FAKESHIELD_WEIGHT_DIR
+from config import (
+    FAKESHIELD_DTE_TEMPERATURE,
+    FAKESHIELD_MASK_CLOSE_KERNEL,
+    FAKESHIELD_MASK_DILATE_ITER,
+    FAKESHIELD_MASK_DILATE_KERNEL,
+    FAKESHIELD_SCRIPT_DIR,
+    FAKESHIELD_TMP_DIR,
+    FAKESHIELD_WEIGHT_DIR,
+)
 from utils import mask_to_base64, overlay_to_base64
 from utils.explanation import generate_explanation
 
@@ -57,6 +65,8 @@ def _run_dte_fdm(image_path: str, dte_output_path: str) -> str:
         dte_output_path,
         "--max-new-tokens",
         "512",
+        "--temperature",
+        FAKESHIELD_DTE_TEMPERATURE,
     ]
     _run_checked(cmd, timeout=240)
     with open(dte_output_path, "r", encoding="utf-8") as f:
@@ -84,8 +94,29 @@ def _load_mflm_mask(mflm_output_dir: str, orig_h: int, orig_w: int) -> np.ndarra
             path = os.path.join(mflm_output_dir, fname)
             mask_img = cv2.imread(path, cv2.IMREAD_GRAYSCALE)
             if mask_img is not None:
-                return (cv2.resize(mask_img, (orig_w, orig_h)) > 127).astype(np.uint8)
+                mask = (cv2.resize(mask_img, (orig_w, orig_h)) > 127).astype(np.uint8)
+                return _postprocess_mask(mask)
     return None
+
+
+def _odd_kernel(size: int) -> np.ndarray | None:
+    if size <= 1:
+        return None
+    if size % 2 == 0:
+        size += 1
+    return np.ones((size, size), np.uint8)
+
+
+def _postprocess_mask(mask: np.ndarray) -> np.ndarray:
+    close_kernel = _odd_kernel(FAKESHIELD_MASK_CLOSE_KERNEL)
+    if close_kernel is not None:
+        mask = cv2.morphologyEx(mask, cv2.MORPH_CLOSE, close_kernel)
+
+    dilate_kernel = _odd_kernel(FAKESHIELD_MASK_DILATE_KERNEL)
+    if dilate_kernel is not None and FAKESHIELD_MASK_DILATE_ITER > 0:
+        mask = cv2.dilate(mask, dilate_kernel, iterations=FAKESHIELD_MASK_DILATE_ITER)
+
+    return mask.astype(np.uint8)
 
 
 def _is_fake_from_dte(text: str) -> bool:

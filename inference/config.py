@@ -45,6 +45,10 @@ FAKESHIELD_WEIGHT_DIR  = os.environ.get(
     os.path.join(FAKESHIELD_SCRIPT_DIR, "weight/fakeshield-v1-22b"),
 )
 FAKESHIELD_TMP_DIR     = os.environ.get("FAKESHIELD_TMP_DIR", "/tmp/fakeshield_inference")
+FAKESHIELD_DTE_TEMPERATURE = os.environ.get("FAKESHIELD_DTE_TEMPERATURE", "0")
+FAKESHIELD_MASK_CLOSE_KERNEL = int(os.environ.get("FAKESHIELD_MASK_CLOSE_KERNEL", "5"))
+FAKESHIELD_MASK_DILATE_KERNEL = int(os.environ.get("FAKESHIELD_MASK_DILATE_KERNEL", "9"))
+FAKESHIELD_MASK_DILATE_ITER = int(os.environ.get("FAKESHIELD_MASK_DILATE_ITER", "1"))
 
 # DINO-CNN v3 report generator (Qwen2-VL)
 QWEN_VL_MODEL_DIR = os.environ.get(

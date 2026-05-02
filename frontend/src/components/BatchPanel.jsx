@@ -91,6 +91,17 @@ function BatchSummary({ batch }) {
         <span>Completed: {batch.completed || 0}</span>
         <span>Failed: {batch.failed || 0}</span>
       </div>
+      {batch.save_dir && (
+        <div style={{
+          marginTop: 10,
+          fontFamily: 'var(--mono)',
+          fontSize: 12,
+          color: 'var(--text-mute)',
+          wordBreak: 'break-word',
+        }}>
+          Saved to: {batch.save_dir}
+        </div>
+      )}
       {batch.error && (
         <div style={{
           marginTop: 12,
@@ -277,6 +288,7 @@ function BatchDetail({ batch, item, index, onBack }) {
 
 export default function BatchPanel() {
   const [folderPath, setFolderPath] = useState('');
+  const [saveDir, setSaveDir] = useState('');
   const [recursive, setRecursive] = useState(false);
   const [model, setModel] = useState('');
   const [explainMode, setExplainMode] = useState('template');
@@ -306,7 +318,7 @@ export default function BatchPanel() {
     setSelectedIndex(null);
 
     try {
-      const created = await submitBatch(folderPath.trim(), model, explainMode, recursive);
+      const created = await submitBatch(folderPath.trim(), model, explainMode, recursive, saveDir.trim());
       setBatch({ ...created, model, explain_mode: explainMode, items: [] });
       setPhase('polling');
 
@@ -339,6 +351,14 @@ export default function BatchPanel() {
             disabled={isProcessing}
             onChange={(e) => setFolderPath(e.target.value)}
             placeholder="E:\\sensing_project\\data\\images"
+            style={inputStyle}
+          />
+          <div style={{ ...sectionLabel, marginTop: 16 }}>Save Directory</div>
+          <input
+            value={saveDir}
+            disabled={isProcessing}
+            onChange={(e) => setSaveDir(e.target.value)}
+            placeholder="E:\\sensing_project\\batch_results"
             style={inputStyle}
           />
           <label style={{

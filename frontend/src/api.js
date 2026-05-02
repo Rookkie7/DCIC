@@ -61,12 +61,15 @@ export async function pollStatus(taskId, onUpdate) {
  * Submit a folder path for batch inference.
  * The folder must be visible to the local backend process.
  */
-export async function submitBatch(folderPath, model, explainMode = 'template', recursive = false) {
+export async function submitBatch(folderPath, model, explainMode = 'template', recursive = false, saveDir = '') {
   const body = new FormData();
   body.append('folder_path', folderPath);
   body.append('model', model);
   body.append('explain_mode', explainMode);
   body.append('recursive', recursive ? 'true' : 'false');
+  if (saveDir.trim()) {
+    body.append('save_dir', saveDir.trim());
+  }
 
   const res = await fetch('/api/batch/submit', { method: 'POST', body });
   if (!res.ok) {

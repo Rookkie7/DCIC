@@ -2,6 +2,8 @@
 from __future__ import annotations
 
 import asyncio
+import base64
+import json
 import mimetypes
 import time
 import uuid
@@ -22,6 +24,7 @@ class BatchItem:
     status: str = "queued"
     result: dict | None = None
     error: str | None = None
+    saved_files: dict[str, str] = field(default_factory=dict)
 
 
 @dataclass
@@ -30,6 +33,7 @@ class BatchTask:
     model: str
     explain_mode: str
     folder_path: str
+    save_dir: str | None
     recursive: bool
     items: list[BatchItem]
     created_at: float = field(default_factory=time.time)
@@ -72,10 +76,12 @@ class BatchTaskQueue:
         self,
         model: str,
         folder_path: str,
+        save_dir: str | None = None,
         explain_mode: str = "template",
         recursive: bool = False,
     ) -> tuple[str, int]:
         root, images = self._scan_images(folder_path, recursive)
+        output_dir = self._prepare_save_dir(save_dir) if save_dir else None
         batch_id = self._make_id()
         items = [
             BatchItem(
@@ -89,6 +95,7 @@ class BatchTaskQueue:
             model=model,
             explain_mode=explain_mode,
             folder_path=str(root),
+            save_dir=str(output_dir) if output_dir else None,
             recursive=recursive,
             items=items,
         )
@@ -121,6 +128,7 @@ class BatchTaskQueue:
             "model": task.model,
             "explain_mode": task.explain_mode,
             "folder_path": task.folder_path,
+            "save_dir": task.save_dir,
             "recursive": task.recursive,
             "total": task.total,
             "completed": task.completed,
@@ -132,6 +140,7 @@ class BatchTaskQueue:
                     "status": item.status,
                     "result": item.result,
                     "error": item.error,
+                    "saved_files": item.saved_files,
                 }
                 for item in task.items
             ],
@@ -139,6 +148,76 @@ class BatchTaskQueue:
         if task.error:
             payload["error"] = task.error
         return payload
+
+    def _prepare_save_dir(self, save_dir: str) -> Path:
+        output_dir = Path(save_dir).expanduser()
+        output_dir.mkdir(parents=True, exist_ok=True)
+        if not output_dir.is_dir():
+            raise ValueError(f"save_dir is not a folder: {save_dir}")
+        return output_dir
+
+    def _safe_stem(self, file_name: str) -> str:
+        stem = Path(file_name).stem
+        return "".join(ch if ch.isalnum() or ch in ("-", "_", ".") else "_" for ch in stem) or "image"
+
+    def _write_text(self, path: Path, text: str) -> str:
+        path.write_text(text, encoding="utf-8")
+        return str(path)
+
+    def _write_base64(self, path: Path, value: str) -> str:
+        path.write_bytes(base64.b64decode(value))
+        return str(path)
+
+    def _save_item_result(self, task: BatchTask, item: BatchItem, index: int) -> None:
+        if not task.save_dir:
+            return
+
+        try:
+            output_dir = Path(task.save_dir)
+            prefix = f"{index:04d}_{self._safe_stem(item.file_name)}"
+            item_json = output_dir / f"{prefix}.result.json"
+            item.saved_files["result_json"] = self._write_text(
+                item_json,
+                json.dumps(
+                    {
+                        "file_name": item.file_name,
+                        "file_path": item.file_path,
+                        "status": item.status,
+                        "result": item.result,
+                        "error": item.error,
+                    },
+                    ensure_ascii=False,
+                    indent=2,
+                ),
+            )
+
+            result = item.result or {}
+            if result.get("explanation"):
+                item.saved_files["explanation_txt"] = self._write_text(
+                    output_dir / f"{prefix}.explanation.txt",
+                    result["explanation"],
+                )
+            if result.get("overlay_base64"):
+                item.saved_files["overlay_jpg"] = self._write_base64(
+                    output_dir / f"{prefix}.overlay.jpg",
+                    result["overlay_base64"],
+                )
+            if result.get("mask_base64"):
+                item.saved_files["mask_png"] = self._write_base64(
+                    output_dir / f"{prefix}.mask.png",
+                    result["mask_base64"],
+                )
+        except Exception as exc:
+            item.saved_files["save_error"] = str(exc)
+
+    def _save_batch_result(self, task: BatchTask) -> None:
+        if not task.save_dir:
+            return
+        try:
+            output_path = Path(task.save_dir) / "batch_result.json"
+            output_path.write_text(json.dumps(self._serialize(task), ensure_ascii=False, indent=2), encoding="utf-8")
+        except Exception as exc:
+            task.error = f"{task.error or ''} Save error: {exc}".strip()
 
     async def _worker(self):
         import httpx
@@ -154,7 +233,7 @@ class BatchTaskQueue:
 
             try:
                 async with httpx.AsyncClient(timeout=TASK_TIMEOUT + 10) as client:
-                    for item in task.items:
+                    for index, item in enumerate(task.items):
                         item.status = "running"
                         try:
                             content_type = mimetypes.guess_type(item.file_path)[0] or "image/png"
@@ -168,21 +247,26 @@ class BatchTaskQueue:
                                 item.result = resp.json()
                                 item.status = "done"
                                 task.completed += 1
+                                self._save_item_result(task, item, index)
                             else:
                                 item.error = f"Inference service error {resp.status_code}: {resp.text[:4000]}"
                                 item.status = "error"
                                 task.failed += 1
+                                self._save_item_result(task, item, index)
                         except Exception as exc:
                             item.error = str(exc)
                             item.status = "error"
                             task.failed += 1
+                            self._save_item_result(task, item, index)
 
                 task.status = "done" if task.failed == 0 else "error"
                 if task.failed:
                     task.error = f"{task.failed} of {task.total} images failed."
+                self._save_batch_result(task)
             except Exception as exc:
                 task.status = "error"
                 task.error = str(exc)
+                self._save_batch_result(task)
 
 
 batch_queue = BatchTaskQueue()

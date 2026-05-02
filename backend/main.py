@@ -68,6 +68,7 @@ async def status(task_id: str):
 async def submit_batch(
     model: str = Form(...),
     folder_path: str = Form(...),
+    save_dir: str = Form(""),
     explain_mode: str = Form("template"),
     recursive: bool = Form(False),
 ):
@@ -79,13 +80,14 @@ async def submit_batch(
         batch_id, total = await batch_queue.submit(
             model=model,
             folder_path=folder_path.strip(),
+            save_dir=save_dir.strip() or None,
             explain_mode=explain_mode,
             recursive=recursive,
         )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
-    return {"batch_id": batch_id, "status": "queued", "total": total}
+    return {"batch_id": batch_id, "status": "queued", "total": total, "save_dir": save_dir.strip() or None}
 
 
 @app.get("/api/batch/status/{batch_id}")

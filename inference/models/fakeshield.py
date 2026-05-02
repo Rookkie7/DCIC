@@ -1,45 +1,45 @@
 """
 FakeShield inference wrapper.
-Runs DTE-FDM (transformers 4.37.2) then MFLM (transformers 4.28.0)
-as subprocesses, since the two modules require conflicting library versions.
-
-Expected environment on cloud server:
-  - /root/envs/dte/   : conda env with transformers==4.37.2
-  - /root/envs/mflm/  : conda env with transformers==4.28.0
-  (or use the pip-install-on-the-fly approach from cli_demo.sh as fallback)
+Runs the single-image flow from scripts/cli_demo.sh:
+1. DTE-FDM writes a JSONL explanation.
+2. MFLM reads that JSONL and writes a mask when DTE-FDM predicts tampering.
 """
 from __future__ import annotations
 
-import base64
 import json
 import os
 import shutil
 import subprocess
-import tempfile
 import uuid
+
 import cv2
 import numpy as np
 
-from config import FAKESHIELD_WEIGHT_DIR, FAKESHIELD_SCRIPT_DIR, FAKESHIELD_TMP_DIR
+from config import FAKESHIELD_SCRIPT_DIR, FAKESHIELD_TMP_DIR, FAKESHIELD_WEIGHT_DIR
 from utils import mask_to_base64, overlay_to_base64
 from utils.explanation import generate_explanation
 
 os.makedirs(FAKESHIELD_TMP_DIR, exist_ok=True)
 
-# Paths to Python executables for each sub-environment.
-# Adjust these to match the actual conda env paths on the server.
-_DTE_PYTHON  = os.environ.get("DTE_PYTHON",  "python")   # env with transformers 4.37.2
-_MFLM_PYTHON = os.environ.get("MFLM_PYTHON", "python")   # env with transformers 4.28.0
+_DTE_PYTHON = os.environ.get("DTE_PYTHON", "python")
+_MFLM_PYTHON = os.environ.get("MFLM_PYTHON", "python")
 
 
 def _run_dte_fdm(image_path: str, dte_output_path: str) -> str:
-    """Run DTE-FDM and return the raw text output."""
     cmd = [
-        _DTE_PYTHON, "-m", "llava.serve.cli",
-        "--model-path", f"{FAKESHIELD_WEIGHT_DIR}/DTE-FDM",
-        "--DTG-path",   f"{FAKESHIELD_WEIGHT_DIR}/DTG.pth",
-        "--image-path", image_path,
-        "--output-path", dte_output_path,
+        _DTE_PYTHON,
+        "-m",
+        "llava.serve.cli",
+        "--model-path",
+        f"{FAKESHIELD_WEIGHT_DIR}/DTE-FDM",
+        "--DTG-path",
+        f"{FAKESHIELD_WEIGHT_DIR}/DTG.pth",
+        "--image-path",
+        image_path,
+        "--output-path",
+        dte_output_path,
+        "--max_new_tokens",
+        "512",
     ]
     subprocess.run(
         cmd,
@@ -48,18 +48,21 @@ def _run_dte_fdm(image_path: str, dte_output_path: str) -> str:
         timeout=240,
         capture_output=True,
     )
-    with open(dte_output_path, "r") as f:
+    with open(dte_output_path, "r", encoding="utf-8") as f:
         data = json.loads(f.readline().strip())
-    return data.get("text", "")
+    return data.get("outputs") or data.get("text") or ""
 
 
-def _run_mflm(image_path: str, dte_output_path: str, mflm_output_dir: str):
-    """Run MFLM segmentation and save mask to mflm_output_dir."""
+def _run_mflm(dte_output_path: str, mflm_output_dir: str) -> None:
     cmd = [
-        _MFLM_PYTHON, "./MFLM/cli_demo.py",
-        "--version",        f"{FAKESHIELD_WEIGHT_DIR}/MFLM",
-        "--DTE-FDM-output", dte_output_path,
-        "--MFLM-output",    mflm_output_dir,
+        _MFLM_PYTHON,
+        "./MFLM/cli_demo.py",
+        "--version",
+        f"{FAKESHIELD_WEIGHT_DIR}/MFLM",
+        "--DTE-FDM-output",
+        dte_output_path,
+        "--MFLM-output",
+        mflm_output_dir,
     ]
     subprocess.run(
         cmd,
@@ -71,14 +74,41 @@ def _run_mflm(image_path: str, dte_output_path: str, mflm_output_dir: str):
 
 
 def _load_mflm_mask(mflm_output_dir: str, orig_h: int, orig_w: int) -> np.ndarray | None:
-    """Find the first mask PNG output by MFLM and return it."""
     for fname in os.listdir(mflm_output_dir):
-        if fname.lower().endswith((".png", ".jpg")):
+        if fname.lower().endswith((".png", ".jpg", ".jpeg")):
             path = os.path.join(mflm_output_dir, fname)
             mask_img = cv2.imread(path, cv2.IMREAD_GRAYSCALE)
             if mask_img is not None:
                 return (cv2.resize(mask_img, (orig_w, orig_h)) > 127).astype(np.uint8)
     return None
+
+
+def _is_fake_from_dte(text: str) -> bool:
+    text_lower = text.lower()
+    real_markers = (
+        "has not been tampered",
+        "not been tampered",
+        "no tamper",
+        "authentic",
+        "genuine",
+        "real image",
+        "unaltered",
+    )
+    fake_markers = (
+        "has been tampered",
+        "tampered with",
+        "fake",
+        "manipulat",
+        "forg",
+        "alter",
+        "splicing",
+        "copy-move",
+        "inpaint",
+        "remov",
+    )
+    if any(marker in text_lower for marker in real_markers):
+        return False
+    return any(marker in text_lower for marker in fake_markers)
 
 
 def infer(image_bytes: bytes) -> dict:
@@ -87,59 +117,56 @@ def infer(image_bytes: bytes) -> dict:
     os.makedirs(run_dir, exist_ok=True)
 
     try:
-        # Save uploaded image to temp file
         img_path = os.path.join(run_dir, "input.png")
         nparr = np.frombuffer(image_bytes, np.uint8)
         img_bgr = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
+        if img_bgr is None:
+            raise ValueError("Could not decode image.")
+
         orig_h, orig_w = img_bgr.shape[:2]
         cv2.imwrite(img_path, img_bgr)
 
-        dte_output  = os.path.join(run_dir, "dte_output.jsonl")
+        dte_output = os.path.join(run_dir, "dte_output.jsonl")
         mflm_outdir = os.path.join(run_dir, "mflm_output")
         os.makedirs(mflm_outdir, exist_ok=True)
 
-        # Stage 1: DTE-FDM
         dte_text = _run_dte_fdm(img_path, dte_output)
-
-        # Determine label from DTE-FDM text
-        text_lower = dte_text.lower()
-        is_fake = any(kw in text_lower for kw in (
-            "tamper", "fake", "manipulat", "forg", "alter", "splicing",
-            "copy-move", "inpaint", "remov",
-        ))
-        # Fallback: if text mentions "authentic" / "real" / "no tamper" → real
-        if any(kw in text_lower for kw in ("authentic", "no tamper", "genuine", "real image")):
-            is_fake = False
-
+        is_fake = _is_fake_from_dte(dte_text)
         label = "fake" if is_fake else "real"
 
         mask_b64 = overlay_b64 = None
         mask = None
+        mflm_error = None
 
         if is_fake:
-            # Stage 2: MFLM segmentation
             try:
-                _run_mflm(img_path, dte_output, mflm_outdir)
+                _run_mflm(dte_output, mflm_outdir)
                 mask = _load_mflm_mask(mflm_outdir, orig_h, orig_w)
                 if mask is not None and mask.sum() > 0:
-                    mask_b64    = mask_to_base64(mask, orig_h, orig_w)
+                    mask_b64 = mask_to_base64(mask, orig_h, orig_w)
                     overlay_b64 = overlay_to_base64(img_bgr, mask, orig_h, orig_w)
-            except Exception:
-                pass  # MFLM failure is non-fatal; still return DTE-FDM result
+            except Exception as exc:
+                mflm_error = str(exc)
 
         explanation = generate_explanation(
-            label=label, model="fakeshield",
-            mask=mask, confidence=None,
+            label=label,
+            model="fakeshield",
+            mask=mask,
+            confidence=None,
             dte_fdm_text=dte_text if is_fake else None,
         )
 
-        return {
+        result = {
             "label": label,
-            "confidence": None,          # FakeShield doesn't output a scalar confidence
+            "confidence": None,
             "mask_base64": mask_b64,
             "overlay_base64": overlay_b64,
             "explanation": explanation,
+            "dte_fdm_text": dte_text,
         }
+        if mflm_error:
+            result["mflm_error"] = mflm_error
+        return result
 
     finally:
         shutil.rmtree(run_dir, ignore_errors=True)

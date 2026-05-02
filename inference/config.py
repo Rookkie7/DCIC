@@ -39,9 +39,12 @@ WARPAD_NOISE_LEVEL = 0.2
 WARPAD_THRESHOLD   = 0.9424   # mean similarity >= threshold → REAL
 
 # ── FakeShield ───────────────────────────────────────────────────────────────
-FAKESHIELD_WEIGHT_DIR  = "/root/autodl-tmp/FakeShield/weight/fakeshield-v1-22b"
-FAKESHIELD_SCRIPT_DIR  = "/root/autodl-tmp/FakeShield"
-FAKESHIELD_TMP_DIR     = "/tmp/fakeshield_inference"
+FAKESHIELD_SCRIPT_DIR  = os.environ.get("FAKESHIELD_SCRIPT_DIR", "/root/autodl-tmp/FakeShield")
+FAKESHIELD_WEIGHT_DIR  = os.environ.get(
+    "FAKESHIELD_WEIGHT_DIR",
+    os.path.join(FAKESHIELD_SCRIPT_DIR, "weight/fakeshield-v1-22b"),
+)
+FAKESHIELD_TMP_DIR     = os.environ.get("FAKESHIELD_TMP_DIR", "/tmp/fakeshield_inference")
 
 # DINO-CNN v3 report generator (Qwen2-VL)
 QWEN_VL_MODEL_DIR = os.environ.get(
